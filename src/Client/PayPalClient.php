@@ -24,6 +24,7 @@ use Sylius\Component\Channel\Context\ChannelContextInterface;
 use Sylius\Component\Core\Model\ChannelInterface;
 use Sylius\PayPalPlugin\Exception\PayPalApiTimeoutException;
 use Sylius\PayPalPlugin\Exception\PayPalAuthorizationException;
+use Sylius\PayPalPlugin\Exception\PayPalInvalidResponseFormatException;
 use Sylius\PayPalPlugin\Provider\PayPalConfigurationProviderInterface;
 use Sylius\PayPalPlugin\Provider\UuidProviderInterface;
 
@@ -99,15 +100,36 @@ final class PayPalClient implements PayPalClientInterface
 
         try {
             $response = $this->doRequest($method, $fullUrl, $options);
+            $contents = $response->getBody()->getContents();
+
             if ($this->loggingLevelIncreased) {
                 $this->logger->debug(sprintf('%s request to "%s" called successfully', $method, $fullUrl));
             }
         } catch (RequestException $exception) {
             /** @var ResponseInterface $response */
             $response = $exception->getResponse();
+            $contents = $response->getBody()->getContents();
+
+            if ($this->loggingLevelIncreased) {
+                $this->logger->error(
+                    sprintf('%s request to "%s" failed with status code %d', $method, $fullUrl, $response->getStatusCode()),
+                    ['responseBody' => $contents],
+                );
+            }
         }
 
-        $content = (array) json_decode($response->getBody()->getContents(), true);
+        $content = (array) json_decode($contents, true);
+        if (json_last_error() !== \JSON_ERROR_NONE) {
+            $this
+                ->logger
+                ->error(
+                    sprintf('%s request to "%s" did not return a valid JSON', $method, $fullUrl),
+                    ['responseBody' => $contents],
+                )
+            ;
+
+            throw new PayPalInvalidResponseFormatException();
+        }
 
         if (
             (!in_array($response->getStatusCode(), [200, 204])) &&
