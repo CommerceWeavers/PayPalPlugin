@@ -25,6 +25,7 @@ use Sylius\Component\Core\Repository\CustomerRepositoryInterface;
 use Sylius\PayPalPlugin\Api\CacheAuthorizeClientApiInterface;
 use Sylius\PayPalPlugin\Api\OrderDetailsApiInterface;
 use Sylius\PayPalPlugin\Exception\PaymentAmountMismatchException;
+use Sylius\PayPalPlugin\Exception\PayPalMissingResponseDataException;
 use Sylius\PayPalPlugin\Manager\PaymentStateManagerInterface;
 use Sylius\PayPalPlugin\Provider\OrderProviderInterface;
 use Sylius\PayPalPlugin\Verifier\PaymentAmountVerifierInterface;
@@ -79,6 +80,7 @@ final readonly class ProcessPayPalOrderAction
         }
 
         $data = $this->getOrderDetails($payload->getString('payPalOrderId'), $payment);
+        $this->validateOrderDetails($data);
 
         /** @var CustomerInterface|null $customer */
         $customer = $order->getCustomer();
@@ -197,5 +199,23 @@ final readonly class ProcessPayPalOrderAction
         }
 
         return $totalAmount;
+    }
+
+    private function validateOrderDetails(array $data): void
+    {
+        PayPalMissingResponseDataException::assertKeysExist($data, 'payer', 'purchase_units');
+        PayPalMissingResponseDataException::assertKeysExist($data['payer'], 'address', 'email_address', 'name');
+        PayPalMissingResponseDataException::assertKeysExist($data['payer']['address'], 'country_code');
+        PayPalMissingResponseDataException::assertKeysExist($data['payer']['name'], 'given_name', 'surname');
+        PayPalMissingResponseDataException::assertKeysExist($data['purchase_units'], '0');
+        PayPalMissingResponseDataException::assertKeysExist($data['purchase_units'][0], 'shipping');
+        PayPalMissingResponseDataException::assertKeysExist($data['purchase_units'][0]['shipping'], 'address');
+        PayPalMissingResponseDataException::assertKeysExist(
+            $data['purchase_units'][0]['shipping']['address'],
+            'address_line_1',
+            'admin_area_2',
+            'country_code',
+            'postal_code',
+        );
     }
 }

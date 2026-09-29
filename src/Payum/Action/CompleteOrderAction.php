@@ -25,6 +25,7 @@ use Sylius\PayPalPlugin\Api\CompleteOrderApiInterface;
 use Sylius\PayPalPlugin\Api\OrderDetailsApiInterface;
 use Sylius\PayPalPlugin\Api\UpdateOrderAddressApiInterface;
 use Sylius\PayPalPlugin\Api\UpdateOrderApiInterface;
+use Sylius\PayPalPlugin\Exception\PayPalMissingResponseDataException;
 use Sylius\PayPalPlugin\Payum\Request\CompleteOrder;
 use Sylius\PayPalPlugin\Processor\PayPalAddressProcessorInterface;
 use Sylius\PayPalPlugin\Updater\PaymentUpdaterInterface;
@@ -105,6 +106,7 @@ final readonly class CompleteOrderAction implements ActionInterface
         }
         $this->completeOrderApi->complete($token, $request->getOrderId());
         $orderDetails = $this->orderDetailsApi->get($token, $request->getOrderId());
+        PayPalMissingResponseDataException::assertKeysExist($orderDetails, 'status', 'id', 'purchase_units');
 
         $details = [
             'status' => $orderDetails['status'] === 'COMPLETED' ? StatusAction::STATUS_COMPLETED : StatusAction::STATUS_PROCESSING,

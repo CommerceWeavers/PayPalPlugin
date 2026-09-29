@@ -23,6 +23,7 @@ use Sylius\Component\Payment\PaymentTransitions;
 use Sylius\PayPalPlugin\Api\CacheAuthorizeClientApiInterface;
 use Sylius\PayPalPlugin\Api\OrderDetailsApiInterface;
 use Sylius\PayPalPlugin\DependencyInjection\SyliusPayPalExtension;
+use Sylius\PayPalPlugin\Exception\PayPalMissingResponseDataException;
 use Sylius\PayPalPlugin\Payum\Action\StatusAction;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -64,6 +65,14 @@ final class CompletePaidPaymentsCommand extends Command
 
             $token = $this->authorizeClientApi->authorize($paymentMethod);
             $details = $this->orderDetailsApi->get($token, $payPalOrderId);
+
+            try {
+                PayPalMissingResponseDataException::assertKeysExist($details, 'status');
+            } catch (PayPalMissingResponseDataException $exception) {
+                $output->writeln('<error>' . $exception->getMessage() . '</error>');
+
+                continue;
+            }
 
             if ($details['status'] === 'COMPLETED') {
                 $this->stateMachine->apply($payment, PaymentTransitions::GRAPH, PaymentTransitions::TRANSITION_COMPLETE);

@@ -20,6 +20,7 @@ use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Sylius\PayPalPlugin\Api\CacheAuthorizeClientApiInterface;
 use Sylius\PayPalPlugin\Api\CreateOrderApiInterface;
+use Sylius\PayPalPlugin\Exception\PayPalMissingResponseDataException;
 use Sylius\PayPalPlugin\Provider\UuidProviderInterface;
 
 final readonly class CaptureAction implements ActionInterface
@@ -45,6 +46,7 @@ final readonly class CaptureAction implements ActionInterface
 
         $referenceId = $this->uuidProvider->provide();
         $content = $this->createOrderApi->create($token, $payment, $referenceId);
+        PayPalMissingResponseDataException::assertKeysExist($content, 'status', 'id');
 
         if ($content['status'] === 'CREATED') {
             $payment->setDetails([

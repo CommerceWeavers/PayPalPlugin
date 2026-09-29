@@ -22,6 +22,7 @@ use Sylius\PayPalPlugin\Api\CacheAuthorizeClientApiInterface;
 use Sylius\PayPalPlugin\Api\OrderDetailsApiInterface;
 use Sylius\PayPalPlugin\Api\RefundPaymentApiInterface;
 use Sylius\PayPalPlugin\DependencyInjection\SyliusPayPalExtension;
+use Sylius\PayPalPlugin\Exception\PayPalMissingResponseDataException;
 use Sylius\PayPalPlugin\Exception\PayPalOrderRefundException;
 use Sylius\PayPalPlugin\Generator\PayPalAuthAssertionGeneratorInterface;
 use Sylius\PayPalPlugin\Provider\RefundReferenceNumberProviderInterface;
@@ -59,6 +60,8 @@ final readonly class PayPalPaymentRefundProcessor implements PaymentRefundProces
         try {
             $token = $this->authorizeClientApi->authorize($paymentMethod);
             $details = $this->orderDetailsApi->get($token, (string) $details['paypal_order_id']);
+            PayPalMissingResponseDataException::assertKeysExist($details, 'purchase_units');
+
             $authAssertion = $this->payPalAuthAssertionGenerator->generate($paymentMethod);
             $referenceNumber = $this->refundReferenceNumberProvider->provide($payment);
             $payPalPaymentId = (string) $details['purchase_units'][0]['payments']['captures'][0]['id'];
