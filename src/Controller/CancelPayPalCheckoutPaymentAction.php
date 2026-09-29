@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 namespace Sylius\PayPalPlugin\Controller;
 
+use Psr\Log\LoggerInterface;
 use Sylius\PayPalPlugin\Manager\PaymentStateManagerInterface;
 use Sylius\PayPalPlugin\Provider\PaymentProviderInterface;
 use Sylius\PayPalPlugin\Repository\Query\PaypalPaymentQueryInterface;
@@ -25,6 +26,7 @@ final readonly class CancelPayPalCheckoutPaymentAction
     public function __construct(
         private ?PaymentProviderInterface $paymentProvider,
         private PaymentStateManagerInterface $paymentStateManager,
+        private LoggerInterface $logger,
         private ?PaypalPaymentQueryInterface $paypalPaymentQuery = null,
     ) {
         if (null !== $this->paymentProvider) {
@@ -64,7 +66,14 @@ final readonly class CancelPayPalCheckoutPaymentAction
         $flashBag = $request->getSession()->getBag('flashes');
         $flashBag->add('error', 'sylius_paypal.something_went_wrong');
 
-        $this->paymentStateManager->cancel($payment);
+        if ($payment !== null) {
+            $this->paymentStateManager->cancel($payment);
+        } else {
+            $this->logger->error(
+                'Payment not found by PayPal Order ID {paypalOrderId}',
+                ['paypalOrderId' => $paypalOrderId],
+            );
+        }
 
         return new Response('', Response::HTTP_NO_CONTENT);
     }

@@ -55,6 +55,7 @@ return static function (ContainerConfigurator $container) {
             service('request_stack'),
             service('sylius_abstraction.state_machine'),
             service('sylius.order_processing.order_payment_processor.checkout'),
+            service('monolog.logger.paypal'),
             service('sylius_paypal.repository.query.paypal_payment'),
         ]);
 
@@ -70,6 +71,7 @@ return static function (ContainerConfigurator $container) {
         ->args([
             service('sylius_paypal.provider.payment'),
             service('sylius_paypal.manager.payment_state'),
+            service('monolog.logger.paypal'),
             service('sylius_paypal.repository.query.paypal_payment'),
         ]);
 
@@ -78,8 +80,7 @@ return static function (ContainerConfigurator $container) {
             service('sylius_paypal.manager.payment_state'),
             service('router'),
             service('sylius_paypal.provider.order'),
-            service('sylius_paypal.api.authorize_client'),
-            service('sylius_paypal.api.complete_order'),
+            service('monolog.logger.paypal'),
         ]);
 
     $services->set('sylius_paypal.controller.create_paypal_order_from_payment_page', CreatePayPalOrderFromPaymentPageAction::class)
@@ -88,6 +89,7 @@ return static function (ContainerConfigurator $container) {
             service('sylius_paypal.manager.payment_state'),
             service('sylius_paypal.provider.order'),
             service('sylius_paypal.resolver.capture_payment'),
+            service('monolog.logger.paypal'),
         ]);
 
     $services->set('sylius_paypal.controller.download_payouts_report', DownloadPayoutsReportAction::class)
@@ -107,6 +109,7 @@ return static function (ContainerConfigurator $container) {
             service('sylius_paypal.manager.payment_state'),
             service('sylius_paypal.provider.order'),
             service('sylius_paypal.resolver.capture_payment'),
+            service('monolog.logger.paypal'),
         ]);
 
     $services->set('sylius_paypal.controller.create_paypal_order_from_cart', CreatePayPalOrderFromCartAction::class)
@@ -114,6 +117,7 @@ return static function (ContainerConfigurator $container) {
             service('sylius.manager.payment'),
             service('sylius_paypal.provider.order'),
             service('sylius_paypal.resolver.capture_payment'),
+            service('monolog.logger.paypal'),
             service('sylius.remover.payment.order'),
             service('sylius.order_processing.order_processor'),
             service('sylius_paypal.resolver.paypal_payment_methods'),
@@ -152,6 +156,7 @@ return static function (ContainerConfigurator $container) {
             service('sylius_paypal.api.cache_authorize_client'),
             service('sylius_paypal.api.order_details'),
             service('sylius_paypal.provider.order'),
+            service('monolog.logger.paypal'),
             service('sylius_paypal.verifier.payment_amount'),
         ]);
 
@@ -162,6 +167,7 @@ return static function (ContainerConfigurator $container) {
             service('sylius_paypal.api.update_order'),
             service('sylius.factory.address'),
             service('sylius.order_processing.order_processor'),
+            service('monolog.logger.paypal'),
             service('sylius_paypal.repository.query.paypal_payment'),
         ]);
 
@@ -172,6 +178,7 @@ return static function (ContainerConfigurator $container) {
             service('sylius_paypal.provider.order'),
             service('sylius_abstraction.state_machine'),
             service('sylius.manager.order'),
+            service('monolog.logger.paypal'),
             service('sylius_paypal.verifier.payment_amount'),
             service('sylius.order_processing.order_processor'),
         ]);

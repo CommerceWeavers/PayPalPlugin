@@ -14,6 +14,7 @@ declare(strict_types=1);
 namespace Sylius\PayPalPlugin\Controller;
 
 use Payum\Core\Model\GatewayConfigInterface;
+use Psr\Log\LoggerInterface;
 use Sylius\Component\Core\Factory\AddressFactoryInterface;
 use Sylius\Component\Core\Model\AddressInterface;
 use Sylius\Component\Core\Model\OrderInterface;
@@ -36,6 +37,7 @@ final readonly class UpdatePayPalOrderAction
         private UpdateOrderApiInterface $updateOrderApi,
         private AddressFactoryInterface $addressFactory,
         private OrderProcessorInterface $orderProcessor,
+        private LoggerInterface $logger,
         private ?PaypalPaymentQueryInterface $paypalPaymentQuery = null,
     ) {
         if (null !== $this->paymentProvider) {
@@ -69,6 +71,12 @@ final readonly class UpdatePayPalOrderAction
             $payment = $this->paypalPaymentQuery->getForUpdateByOrderId($orderId);
         } else {
             $payment = $this->paymentProvider->getByPayPalOrderId($orderId);
+        }
+
+        if ($payment === null) {
+            $this->logger->error('Payment not found by order ID {orderId}', ['orderId' => $orderId]);
+
+            return new JsonResponse([], Response::HTTP_NOT_FOUND);
         }
 
         /** @var OrderInterface $order */

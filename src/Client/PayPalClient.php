@@ -118,6 +118,10 @@ final class PayPalClient implements PayPalClientInterface
             }
         }
 
+        if ($response->getStatusCode() === 204 && $contents === '') {
+            return [];
+        }
+
         $content = (array) json_decode($contents, true);
         if (json_last_error() !== \JSON_ERROR_NONE) {
             $this

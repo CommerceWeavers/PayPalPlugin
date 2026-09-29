@@ -321,10 +321,43 @@ final class PayPalClientTest extends TestCase
 
         $this->expectException(PayPalInvalidResponseFormatException::class);
 
+        $result = $this->payPalClient->get('v2/get-request/', 'TOKEN');
+
+        self::assertEquals([], $result);
+    }
+
+    #[Test]
+    public function it_handles_no_content_responses(): void
+    {
+        $request = $this->createMock(RequestInterface::class);
+        $channel = $this->createMock(ChannelInterface::class);
+
+        $this->channelContext
+            ->method('getChannel')
+            ->willReturn($channel);
+
+        $this->payPalConfigurationProvider
+            ->expects(self::once())
+            ->method('getPartnerAttributionId')
+            ->with($channel)
+            ->willReturn('TRACKING-ID');
+
+        $this->requestFactory
+            ->method('createRequest')
+            ->with('GET', 'https://test-api.paypal.com/v2/get-request/')
+            ->willReturn($request);
+
+        $request->method('withHeader')->willReturn($request);
+
+        $this->client
+            ->method('sendRequest')
+            ->with($request)
+            ->willReturn($this->mockResponse(204, ''));
+
         $this->payPalClient->get('v2/get-request/', 'TOKEN');
     }
 
-    private function mockResponse(int $statusCode, string $contents): ResponseInterface&MockObject
+    private function mockResponse(int $statusCode, ?string $contents): ResponseInterface&MockObject
     {
         $response = $this->createMock(ResponseInterface::class);
         $body = $this->createMock(StreamInterface::class);
