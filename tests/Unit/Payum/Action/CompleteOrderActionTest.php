@@ -27,6 +27,7 @@ use Sylius\PayPalPlugin\Api\CompleteOrderApiInterface;
 use Sylius\PayPalPlugin\Api\OrderDetailsApiInterface;
 use Sylius\PayPalPlugin\Api\UpdateOrderAddressApiInterface;
 use Sylius\PayPalPlugin\Api\UpdateOrderApiInterface;
+use Sylius\PayPalPlugin\Exception\PayPalMissingResponseDataException;
 use Sylius\PayPalPlugin\Payum\Action\CompleteOrderAction;
 use Sylius\PayPalPlugin\Payum\Action\StatusAction;
 use Sylius\PayPalPlugin\Payum\Request\CompleteOrder;
@@ -218,5 +219,37 @@ final class CompleteOrderActionTest extends TestCase
         $updateOrderAddressApi->expects(self::once())->method('update')->with('TOKEN', '123123', 'REFERENCE_ID', $shippingAddress);
 
         $completeOrderAction->execute($request);
+    }
+
+    #[Test]
+    public function it_throws_an_exception_when_order_details_do_not_contain_expected_keys(): void
+    {
+        $this->expectException(PayPalMissingResponseDataException::class);
+        $this->expectExceptionMessage('Expected PayPal response to contain keys: status, id, purchase_units, but they were not present. Actual keys: foo');
+
+        $request = $this->createMock(CompleteOrder::class);
+        $payment = $this->createMock(PaymentInterface::class);
+        $paymentMethod = $this->createMock(PaymentMethodInterface::class);
+        $order = $this->createMock(OrderInterface::class);
+
+        $request->method('getModel')->willReturn($payment);
+        $payment->method('getMethod')->willReturn($paymentMethod);
+        $payment->method('getDetails')->willReturn([]);
+        $payment->method('getOrder')->willReturn($order);
+
+        $this->authorizeClientApi->method('authorize')->with($paymentMethod)->willReturn('TOKEN');
+
+        $request->method('getOrderId')->willReturn('123123');
+
+        $payment->method('getAmount')->willReturn(1000);
+        $order->method('getTotal')->willReturn(1000);
+        $order->method('isShippingRequired')->willReturn(false);
+
+        $this->completeOrderApi->expects(self::once())->method('complete')->with('TOKEN', '123123');
+        $this->orderDetailsApi->method('get')->with('TOKEN', '123123')->willReturn(['foo' => 'bar']);
+
+        $payment->expects(self::never())->method('setDetails');
+
+        $this->completeOrderAction->execute($request);
     }
 }

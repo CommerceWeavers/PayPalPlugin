@@ -52,6 +52,55 @@ final class CancelLastPayPalPaymentActionTest extends TestCase
         );
     }
 
+    public function testReturnNotFoundWhenOrderCannotBeFound(): void
+    {
+        $request = new Request();
+        $request->attributes->set('token', 'order-token');
+
+        $this->orderRepository
+            ->expects($this->once())
+            ->method('findOneByTokenValue')
+            ->with('order-token')
+            ->willReturn(null)
+        ;
+
+        $this->stateMachine->expects($this->never())->method('can');
+        $this->stateMachine->expects($this->never())->method('apply');
+        $this->objectManager->expects($this->never())->method('flush');
+
+        $response = ($this->action)($request);
+
+        $this->assertInstanceOf(Response::class, $response);
+        $this->assertEquals(Response::HTTP_NOT_FOUND, $response->getStatusCode());
+        $this->assertEquals('Could not find order by token "order-token".', $response->getContent());
+    }
+
+    public function testReturnNoContentWhenOrderHasNoPayment(): void
+    {
+        $order = $this->createMock(OrderInterface::class);
+        $request = new Request();
+        $request->attributes->set('token', 'order-token');
+
+        $this->orderRepository
+            ->expects($this->once())
+            ->method('findOneByTokenValue')
+            ->with('order-token')
+            ->willReturn($order)
+        ;
+
+        $order->expects($this->once())->method('getLastPayment')->willReturn(null);
+
+        $this->stateMachine->expects($this->never())->method('can');
+        $this->stateMachine->expects($this->never())->method('apply');
+        $this->objectManager->expects($this->never())->method('flush');
+
+        $response = ($this->action)($request);
+
+        $this->assertInstanceOf(Response::class, $response);
+        $this->assertEquals(Response::HTTP_NO_CONTENT, $response->getStatusCode());
+        $this->assertEquals('', $response->getContent());
+    }
+
     public function testReturnNoContentWhenPaymentCannotBeCancelled(): void
     {
         $order = $this->createMock(OrderInterface::class);

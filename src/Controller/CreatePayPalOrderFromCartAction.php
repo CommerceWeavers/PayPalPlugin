@@ -15,6 +15,7 @@ namespace Sylius\PayPalPlugin\Controller;
 
 use Doctrine\Persistence\ObjectManager;
 use GuzzleHttp\Exception\GuzzleException;
+use Psr\Log\LoggerInterface;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
@@ -35,6 +36,7 @@ final readonly class CreatePayPalOrderFromCartAction
         private ObjectManager $paymentManager,
         private OrderProviderInterface $orderProvider,
         private CapturePaymentResolverInterface $capturePaymentResolver,
+        private LoggerInterface $logger,
         private ?OrderPaymentsRemoverInterface $orderPaymentsRemover = null,
         private ?OrderProcessorInterface $orderProcessor = null,
         private ?PayPalPaymentMethodsResolverInterface $payPalMethodsResolver = null,
@@ -73,7 +75,9 @@ final readonly class CreatePayPalOrderFromCartAction
         try {
             $payment = $this->getPayment($order);
             $this->capturePaymentResolver->resolve($payment);
-        } catch (\DomainException|GuzzleException) {
+        } catch (\DomainException|GuzzleException $exception) {
+            $this->logger->error('Error during creating PayPal order', ['exception' => $exception]);
+
             /** @var FlashBagInterface $flashBag */
             $flashBag = $request->getSession()->getBag('flashes');
             $flashBag->add('error', 'sylius_paypal.something_went_wrong');
@@ -92,8 +96,18 @@ final readonly class CreatePayPalOrderFromCartAction
 
     private function getPayment(OrderInterface $order): PaymentInterface
     {
-        /** @var PaymentInterface $payment */
+        /** @var PaymentInterface|null $payment */
         $payment = $order->getLastPayment(PaymentInterface::STATE_CART);
+        if ($payment === null) {
+            throw new \DomainException(
+                sprintf(
+                    'Order with token "%s" has no payment with state "%s".',
+                    $order->getId(),
+                    PaymentInterface::STATE_CART,
+                ),
+            );
+        }
+
         /** @var PaymentMethodInterface|null $paymentMethod */
         $paymentMethod = $payment->getMethod();
         $factoryName = $paymentMethod?->getGatewayConfig()?->getFactoryName();
@@ -110,6 +124,16 @@ final readonly class CreatePayPalOrderFromCartAction
         $this->orderProcessor->process($order);
 
         $payment = $order->getLastPayment(PaymentInterface::STATE_CART);
+        if ($payment === null) {
+            throw new \DomainException(
+                sprintf(
+                    'Order with token "%s" has no payment with state "%s" after processing.',
+                    $order->getId(),
+                    PaymentInterface::STATE_CART,
+                ),
+            );
+        }
+
         if ($order->getChannel() !== null && $this->payPalMethodsResolver !== null) {
             $paypalMethods = $this->payPalMethodsResolver->getInChannel($order->getChannel());
             if ([] !== $paypalMethods) {

@@ -30,6 +30,7 @@ use Sylius\PayPalPlugin\Client\PayPalClient;
 use Sylius\PayPalPlugin\Client\PayPalClientInterface;
 use Sylius\PayPalPlugin\Exception\PayPalApiTimeoutException;
 use Sylius\PayPalPlugin\Exception\PayPalAuthorizationException;
+use Sylius\PayPalPlugin\Exception\PayPalInvalidResponseFormatException;
 use Sylius\PayPalPlugin\Provider\PayPalConfigurationProviderInterface;
 use Sylius\PayPalPlugin\Provider\UuidProviderInterface;
 
@@ -89,8 +90,6 @@ final class PayPalClientTest extends TestCase
     public function it_returns_auth_token_for_given_client_data(): void
     {
         $request = $this->createMock(RequestInterface::class);
-        $response = $this->createMock(ResponseInterface::class);
-        $body = $this->createMock(StreamInterface::class);
 
         $this->requestFactory
             ->expects(self::once())
@@ -105,22 +104,7 @@ final class PayPalClientTest extends TestCase
             ->expects(self::once())
             ->method('sendRequest')
             ->with($request)
-            ->willReturn($response);
-
-        $response
-            ->expects(self::once())
-            ->method('getStatusCode')
-            ->willReturn(200);
-
-        $response
-            ->expects(self::once())
-            ->method('getBody')
-            ->willReturn($body);
-
-        $body
-            ->expects(self::once())
-            ->method('getContents')
-            ->willReturn('{"access_token": "TOKEN"}');
+            ->willReturn($this->mockResponse(200, '{"access_token": "TOKEN"}'));
 
         $result = $this->payPalClient->authorize('CLIENT_ID', 'CLIENT_SECRET');
 
@@ -131,7 +115,6 @@ final class PayPalClientTest extends TestCase
     public function it_throws_an_exception_if_client_could_not_be_authorized(): void
     {
         $request = $this->createMock(RequestInterface::class);
-        $response = $this->createMock(ResponseInterface::class);
 
         $this->requestFactory
             ->expects(self::once())
@@ -146,12 +129,7 @@ final class PayPalClientTest extends TestCase
             ->expects(self::once())
             ->method('sendRequest')
             ->with($request)
-            ->willReturn($response);
-
-        $response
-            ->expects(self::once())
-            ->method('getStatusCode')
-            ->willReturn(401);
+            ->willReturn($this->mockResponse(401, ''));
 
         $this->expectException(PayPalAuthorizationException::class);
 
@@ -162,8 +140,6 @@ final class PayPalClientTest extends TestCase
     public function it_calls_get_request_on_paypal_api(): void
     {
         $request = $this->createMock(RequestInterface::class);
-        $response = $this->createMock(ResponseInterface::class);
-        $body = $this->createMock(StreamInterface::class);
         $channel = $this->createMock(ChannelInterface::class);
 
         $this->channelContext
@@ -188,22 +164,7 @@ final class PayPalClientTest extends TestCase
             ->expects(self::once())
             ->method('sendRequest')
             ->with($request)
-            ->willReturn($response);
-
-        $response
-            ->expects(self::once())
-            ->method('getStatusCode')
-            ->willReturn(200);
-
-        $response
-            ->expects(self::once())
-            ->method('getBody')
-            ->willReturn($body);
-
-        $body
-            ->expects(self::once())
-            ->method('getContents')
-            ->willReturn('{"status": "OK", "id": "123123"}');
+            ->willReturn($this->mockResponse(200, '{"status": "OK", "id": "123123"}'));
 
         $result = $this->payPalClient->get('v2/get-request/', 'TOKEN');
 
@@ -214,8 +175,6 @@ final class PayPalClientTest extends TestCase
     public function it_calls_post_request_on_paypal_api(): void
     {
         $request = $this->createMock(RequestInterface::class);
-        $response = $this->createMock(ResponseInterface::class);
-        $body = $this->createMock(StreamInterface::class);
         $stream = $this->createMock(StreamInterface::class);
         $channel = $this->createMock(ChannelInterface::class);
 
@@ -251,22 +210,7 @@ final class PayPalClientTest extends TestCase
             ->expects(self::once())
             ->method('sendRequest')
             ->with($request)
-            ->willReturn($response);
-
-        $response
-            ->expects(self::once())
-            ->method('getStatusCode')
-            ->willReturn(200);
-
-        $response
-            ->expects(self::once())
-            ->method('getBody')
-            ->willReturn($body);
-
-        $body
-            ->expects(self::once())
-            ->method('getContents')
-            ->willReturn('{"status": "OK", "id": "123123"}');
+            ->willReturn($this->mockResponse(200, '{"status": "OK", "id": "123123"}'));
 
         $result = $this->payPalClient->post('v2/post-request/', 'TOKEN', ['parameter' => 'value', 'another_parameter' => 'another_value']);
 
@@ -277,8 +221,6 @@ final class PayPalClientTest extends TestCase
     public function it_calls_patch_request_on_paypal_api(): void
     {
         $request = $this->createMock(RequestInterface::class);
-        $response = $this->createMock(ResponseInterface::class);
-        $body = $this->createMock(StreamInterface::class);
         $stream = $this->createMock(StreamInterface::class);
         $channel = $this->createMock(ChannelInterface::class);
 
@@ -309,22 +251,7 @@ final class PayPalClientTest extends TestCase
             ->expects(self::once())
             ->method('sendRequest')
             ->with($request)
-            ->willReturn($response);
-
-        $response
-            ->expects(self::once())
-            ->method('getStatusCode')
-            ->willReturn(200);
-
-        $response
-            ->expects(self::once())
-            ->method('getBody')
-            ->willReturn($body);
-
-        $body
-            ->expects(self::once())
-            ->method('getContents')
-            ->willReturn('{"status": "OK", "id": "123123"}');
+            ->willReturn($this->mockResponse(200, '{"status": "OK", "id": "123123"}'));
 
         $result = $this->payPalClient->patch('v2/patch-request/123123', 'TOKEN', ['parameter' => 'value', 'another_parameter' => 'another_value']);
 
@@ -362,5 +289,91 @@ final class PayPalClientTest extends TestCase
         $this->expectException(PayPalApiTimeoutException::class);
 
         $this->payPalClient->get('v2/get-request/', 'TOKEN');
+    }
+
+    #[Test]
+    public function it_throws_exception_if_the_response_from_paypal_is_not_a_valid_json(): void
+    {
+        $request = $this->createMock(RequestInterface::class);
+        $channel = $this->createMock(ChannelInterface::class);
+
+        $this->channelContext
+            ->method('getChannel')
+            ->willReturn($channel);
+
+        $this->payPalConfigurationProvider
+            ->expects(self::once())
+            ->method('getPartnerAttributionId')
+            ->with($channel)
+            ->willReturn('TRACKING-ID');
+
+        $this->requestFactory
+            ->method('createRequest')
+            ->with('GET', 'https://test-api.paypal.com/v2/get-request/')
+            ->willReturn($request);
+
+        $request->method('withHeader')->willReturn($request);
+
+        $this->client
+            ->method('sendRequest')
+            ->with($request)
+            ->willReturn($this->mockResponse(500, '<!-- DOCTYPE html --><h1>Something went horribly wrong.</h1>'));
+
+        $this->expectException(PayPalInvalidResponseFormatException::class);
+
+        $result = $this->payPalClient->get('v2/get-request/', 'TOKEN');
+
+        self::assertEquals([], $result);
+    }
+
+    #[Test]
+    public function it_handles_no_content_responses(): void
+    {
+        $request = $this->createMock(RequestInterface::class);
+        $channel = $this->createMock(ChannelInterface::class);
+
+        $this->channelContext
+            ->method('getChannel')
+            ->willReturn($channel);
+
+        $this->payPalConfigurationProvider
+            ->expects(self::once())
+            ->method('getPartnerAttributionId')
+            ->with($channel)
+            ->willReturn('TRACKING-ID');
+
+        $this->requestFactory
+            ->method('createRequest')
+            ->with('GET', 'https://test-api.paypal.com/v2/get-request/')
+            ->willReturn($request);
+
+        $request->method('withHeader')->willReturn($request);
+
+        $this->client
+            ->method('sendRequest')
+            ->with($request)
+            ->willReturn($this->mockResponse(204, ''));
+
+        $this->payPalClient->get('v2/get-request/', 'TOKEN');
+    }
+
+    private function mockResponse(int $statusCode, ?string $contents): ResponseInterface&MockObject
+    {
+        $response = $this->createMock(ResponseInterface::class);
+        $body = $this->createMock(StreamInterface::class);
+
+        $response
+            ->method('getStatusCode')
+            ->willReturn($statusCode);
+
+        $response
+            ->method('getBody')
+            ->willReturn($body);
+
+        $body
+            ->method('getContents')
+            ->willReturn($contents);
+
+        return $response;
     }
 }

@@ -36,13 +36,19 @@ final readonly class CancelLastPayPalPaymentAction
 
     public function __invoke(Request $request): Response
     {
-        /** @var OrderInterface $order */
-        $order = $this->orderRepository->findOneByTokenValue((string) $request->attributes->get('token'));
+        $token = (string) $request->attributes->get('token');
+        /** @var OrderInterface|null $order */
+        $order = $this->orderRepository->findOneByTokenValue($token);
+        if ($order === null) {
+            return new Response(
+                sprintf('Could not find order by token "%s".', $token),
+                Response::HTTP_NOT_FOUND,
+            );
+        }
 
-        /** @var PaymentInterface $payment */
         $payment = $order->getLastPayment();
-
-        if (!$this->stateMachineFactory->can($payment, PaymentTransitions::GRAPH, PaymentTransitions::TRANSITION_CANCEL)) {
+        if ($payment === null ||
+            !$this->stateMachineFactory->can($payment, PaymentTransitions::GRAPH, PaymentTransitions::TRANSITION_CANCEL)) {
             return new Response('', Response::HTTP_NO_CONTENT);
         }
 

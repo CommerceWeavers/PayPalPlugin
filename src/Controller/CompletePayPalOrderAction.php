@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 namespace Sylius\PayPalPlugin\Controller;
 
+use Psr\Log\LoggerInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\PayPalPlugin\Manager\PaymentStateManagerInterface;
 use Sylius\PayPalPlugin\Provider\OrderProviderInterface;
@@ -27,6 +28,7 @@ final readonly class CompletePayPalOrderAction
         private PaymentStateManagerInterface $paymentStateManager,
         private UrlGeneratorInterface $router,
         private OrderProviderInterface $orderProvider,
+        private LoggerInterface $logger,
     ) {
     }
 
@@ -34,8 +36,19 @@ final readonly class CompletePayPalOrderAction
     {
         $token = (string) $request->attributes->get('token');
         $order = $this->orderProvider->provideOrderByToken($token);
-        /** @var PaymentInterface $payment */
+        /** @var PaymentInterface|null $payment */
         $payment = $order->getLastPayment(PaymentInterface::STATE_PROCESSING);
+
+        if ($payment === null) {
+            $error = sprintf(
+                'Order with token "%s" has no payment with state "%s"',
+                $order->getTokenValue(),
+                PaymentInterface::STATE_PROCESSING,
+            );
+            $this->logger->error($error);
+
+            return new JsonResponse(['error' => $error], Response::HTTP_CONFLICT);
+        }
 
         $this->paymentStateManager->complete($payment);
 

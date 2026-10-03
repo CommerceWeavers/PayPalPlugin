@@ -14,10 +14,12 @@ declare(strict_types=1);
 namespace Sylius\PayPalPlugin\Controller;
 
 use Doctrine\Persistence\ObjectManager;
+use Psr\Log\LoggerInterface;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Component\Core\Factory\AddressFactoryInterface;
 use Sylius\Component\Core\Model\AddressInterface;
 use Sylius\Component\Core\Model\CustomerInterface;
+use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Sylius\Component\Core\OrderCheckoutTransitions;
@@ -25,6 +27,7 @@ use Sylius\Component\Core\Repository\CustomerRepositoryInterface;
 use Sylius\PayPalPlugin\Api\CacheAuthorizeClientApiInterface;
 use Sylius\PayPalPlugin\Api\OrderDetailsApiInterface;
 use Sylius\PayPalPlugin\Exception\PaymentAmountMismatchException;
+use Sylius\PayPalPlugin\Exception\PayPalMissingResponseDataException;
 use Sylius\PayPalPlugin\Manager\PaymentStateManagerInterface;
 use Sylius\PayPalPlugin\Provider\OrderProviderInterface;
 use Sylius\PayPalPlugin\Verifier\PaymentAmountVerifierInterface;
@@ -50,6 +53,7 @@ final readonly class ProcessPayPalOrderAction
         private CacheAuthorizeClientApiInterface $authorizeClientApi,
         private OrderDetailsApiInterface $orderDetailsApi,
         private OrderProviderInterface $orderProvider,
+        private LoggerInterface $logger,
         private ?PaymentAmountVerifierInterface $paymentAmountVerifier = null,
     ) {
         if (null === $this->paymentAmountVerifier) {
@@ -75,10 +79,16 @@ final readonly class ProcessPayPalOrderAction
         $payment = $order->getLastPayment(PaymentInterface::STATE_CART);
 
         if (null === $payment) {
+            $this->logger->error(
+                'Order with token {token} has no payment with state {state}',
+                ['token' => $order->getTokenValue(), 'state' => PaymentInterface::STATE_CART],
+            );
+
             return new JsonResponse(['orderID' => $orderId]);
         }
 
         $data = $this->getOrderDetails($payload->getString('payPalOrderId'), $payment);
+        $this->validateOrderDetails($data, $order);
 
         /** @var CustomerInterface|null $customer */
         $customer = $order->getCustomer();
@@ -138,7 +148,12 @@ final readonly class ProcessPayPalOrderAction
             } else {
                 $this->verify($payment, $data);
             }
-        } catch (PaymentAmountMismatchException) {
+        } catch (PaymentAmountMismatchException $exception) {
+            $this->logger->error(
+                'PaymentAmountMismatchException has been thrown (order token: {token})',
+                ['token' => $order->getTokenValue(), 'exception' => $exception],
+            );
+
             $this->paymentStateManager->cancel($payment);
 
             return new JsonResponse(['orderID' => $orderId]);
@@ -197,5 +212,26 @@ final readonly class ProcessPayPalOrderAction
         }
 
         return $totalAmount;
+    }
+
+    private function validateOrderDetails(array $data, OrderInterface $order): void
+    {
+        PayPalMissingResponseDataException::assertKeysExist($data, 'payer', 'purchase_units');
+        PayPalMissingResponseDataException::assertKeysExist($data['payer'], 'address', 'email_address', 'name');
+        PayPalMissingResponseDataException::assertKeysExist($data['payer']['address'], 'country_code');
+        PayPalMissingResponseDataException::assertKeysExist($data['payer']['name'], 'given_name', 'surname');
+        PayPalMissingResponseDataException::assertKeysExist($data['purchase_units'], '0');
+
+        if ($order->isShippingRequired()) {
+            PayPalMissingResponseDataException::assertKeysExist($data['purchase_units'][0], 'shipping');
+            PayPalMissingResponseDataException::assertKeysExist($data['purchase_units'][0]['shipping'], 'address');
+            PayPalMissingResponseDataException::assertKeysExist(
+                $data['purchase_units'][0]['shipping']['address'],
+                'address_line_1',
+                'admin_area_2',
+                'country_code',
+                'postal_code',
+            );
+        }
     }
 }
