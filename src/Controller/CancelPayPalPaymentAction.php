@@ -14,6 +14,7 @@ declare(strict_types=1);
 namespace Sylius\PayPalPlugin\Controller;
 
 use Doctrine\Persistence\ObjectManager;
+use Psr\Log\LoggerInterface;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Order\Processor\OrderProcessorInterface;
@@ -33,6 +34,7 @@ final readonly class CancelPayPalPaymentAction
         private RequestStack $flashBagOrRequestStack,
         private StateMachineInterface $stateMachineFactory,
         private OrderProcessorInterface $orderPaymentProcessor,
+        private LoggerInterface $logger,
         private ?PaypalPaymentQueryInterface $paypalPaymentQuery = null,
     ) {
         if (null !== $this->paymentProvider) {
@@ -61,11 +63,22 @@ final readonly class CancelPayPalPaymentAction
     {
         $payload = $request->getPayload();
         $paypalOrderId = $payload->getString('payPalOrderId');
+        $flashBag = FlashBagProvider::getFlashBag($this->flashBagOrRequestStack);
 
         if (null !== $this->paypalPaymentQuery) {
             $payment = $this->paypalPaymentQuery->getForCancellationByOrderId($paypalOrderId);
         } else {
             $payment = $this->paymentProvider->getByPayPalOrderId($paypalOrderId);
+        }
+
+        if ($payment === null) {
+            $this->logger->error(
+                'Payment not found by PayPal Order ID {paypalOrderId}',
+                ['paypalOrderId' => $paypalOrderId],
+            );
+            $flashBag->add('error', 'sylius_paypal.something_went_wrong');
+
+            return new Response('', Response::HTTP_NO_CONTENT);
         }
 
         /** @var OrderInterface $order */
@@ -77,9 +90,7 @@ final readonly class CancelPayPalPaymentAction
             $this->orderPaymentProcessor->process($order);
             $this->objectManager->flush();
 
-            FlashBagProvider::getFlashBag($this->flashBagOrRequestStack)
-                ->add('success', 'sylius_paypal.payment_cancelled')
-            ;
+            $flashBag->add('success', 'sylius_paypal.payment_cancelled');
         }
 
         return new Response('', Response::HTTP_NO_CONTENT);

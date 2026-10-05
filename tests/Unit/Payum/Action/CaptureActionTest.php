@@ -26,6 +26,7 @@ use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Sylius\PayPalPlugin\Api\CacheAuthorizeClientApiInterface;
 use Sylius\PayPalPlugin\Api\CreateOrderApiInterface;
+use Sylius\PayPalPlugin\Exception\PayPalMissingResponseDataException;
 use Sylius\PayPalPlugin\Payum\Action\CaptureAction;
 use Sylius\PayPalPlugin\Payum\Action\StatusAction;
 use Sylius\PayPalPlugin\Provider\UuidProviderInterface;
@@ -124,5 +125,32 @@ final class CaptureActionTest extends TestCase
         $request->method('getModel')->willReturn('badObject');
 
         self::assertFalse($this->captureAction->supports($request));
+    }
+
+    #[Test]
+    public function it_throws_an_exception_when_response_does_not_contain_expected_keys(): void
+    {
+        $this->expectException(PayPalMissingResponseDataException::class);
+        $this->expectExceptionMessage('Expected PayPal response to contain keys: status, id, but they were not present. Actual keys: foo');
+
+        $request = $this->createMock(Capture::class);
+        $payment = $this->createMock(PaymentInterface::class);
+        $paymentMethod = $this->createMock(PaymentMethodInterface::class);
+        $order = $this->createMock(OrderInterface::class);
+
+        $request->method('getModel')->willReturn($payment);
+        $payment->method('getMethod')->willReturn($paymentMethod);
+        $payment->method('getAmount')->willReturn(1000);
+        $payment->method('getOrder')->willReturn($order);
+        $order->method('getCurrencyCode')->willReturn('USD');
+
+        $this->uuidProvider->method('provide')->willReturn('UUID');
+
+        $this->authorizeClientApi->method('authorize')->with($paymentMethod)->willReturn('ACCESS_TOKEN');
+        $this->createOrderApi->method('create')->with('ACCESS_TOKEN', $payment, 'UUID')->willReturn(['foo' => 'bar']);
+
+        $payment->expects(self::never())->method('setDetails');
+
+        $this->captureAction->execute($request);
     }
 }

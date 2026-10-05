@@ -25,6 +25,6 @@ final readonly class IdentityApi implements IdentityApiInterface
     {
         $content = $this->client->post('v1/identity/generate-token', $token);
 
-        return (string) $content['client_token'];
+        return (string) ($content['client_token'] ?? '');
     }
 }

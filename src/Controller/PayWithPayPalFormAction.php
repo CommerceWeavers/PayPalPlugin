@@ -24,6 +24,7 @@ use Sylius\PayPalPlugin\Processor\LocaleProcessorInterface;
 use Sylius\PayPalPlugin\Provider\AvailableCountriesProviderInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Twig\Environment;
 
 final readonly class PayWithPayPalFormAction
@@ -53,8 +54,12 @@ final readonly class PayWithPayPalFormAction
         $paymentId = (string) $request->attributes->get('paymentId');
         $orderToken = (string) $request->attributes->get('orderToken');
 
-        /** @var PaymentInterface $payment */
+        /** @var PaymentInterface|null $payment */
         $payment = $this->paymentRepository->findOneByOrderToken($paymentId, $orderToken);
+        if ($payment === null) {
+            throw new NotFoundHttpException();
+        }
+
         /** @var PaymentMethodInterface $paymentMethod */
         $paymentMethod = $payment->getMethod();
 

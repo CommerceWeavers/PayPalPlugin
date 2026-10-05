@@ -52,4 +52,18 @@ final class IdentityApiTest extends TestCase
 
         self::assertEquals('CLIENT-TOKEN', $result);
     }
+
+    #[Test]
+    public function it_returns_an_empty_string_when_response_does_not_contain_client_token(): void
+    {
+        $this->payPalClient
+            ->expects(self::once())
+            ->method('post')
+            ->with('v1/identity/generate-token', 'TOKEN')
+            ->willReturn(['foo' => 'bar']);
+
+        $result = $this->identityApi->generateToken('TOKEN');
+
+        self::assertSame('', $result);
+    }
 }

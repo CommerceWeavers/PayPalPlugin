@@ -24,6 +24,7 @@ use Sylius\Component\Payment\Model\GatewayConfigInterface;
 use Sylius\PayPalPlugin\Api\CacheAuthorizeClientApiInterface;
 use Sylius\PayPalPlugin\Api\OrderDetailsApiInterface;
 use Sylius\PayPalPlugin\Api\RefundPaymentApiInterface;
+use Sylius\PayPalPlugin\Exception\PayPalMissingResponseDataException;
 use Sylius\PayPalPlugin\Exception\PayPalOrderRefundException;
 use Sylius\PayPalPlugin\Generator\PayPalAuthAssertionGeneratorInterface;
 use Sylius\PayPalPlugin\Processor\PaymentRefundProcessorInterface;
@@ -174,6 +175,31 @@ final class PayPalPaymentRefundProcessorTest extends TestCase
             ->willThrowException($this->createMock(ClientException::class));
 
         $this->expectException(PayPalOrderRefundException::class);
+
+        $this->paypalPaymentRefundProcessor->refund($payment);
+    }
+
+    #[Test]
+    public function it_throws_an_exception_when_order_details_do_not_contain_expected_keys(): void
+    {
+        $payment = $this->createMock(PaymentInterface::class);
+        $paymentMethod = $this->createMock(PaymentMethodInterface::class);
+        $gatewayConfig = $this->createMock(GatewayConfigInterface::class);
+        $order = $this->createMock(OrderInterface::class);
+
+        $payment->method('getMethod')->willReturn($paymentMethod);
+        $paymentMethod->method('getGatewayConfig')->willReturn($gatewayConfig);
+        $gatewayConfig->method('getFactoryName')->willReturn('sylius_paypal');
+        $payment->method('getDetails')->willReturn(['paypal_order_id' => '123123']);
+        $payment->method('getOrder')->willReturn($order);
+
+        $this->authorizeClientApi->method('authorize')->with($paymentMethod)->willReturn('TOKEN');
+        $this->orderDetailsApi->method('get')->with('TOKEN', '123123')->willReturn(['foo' => 'bar']);
+
+        $this->refundOrderApi->expects(self::never())->method('refund');
+
+        $this->expectException(PayPalMissingResponseDataException::class);
+        $this->expectExceptionMessage('Expected PayPal response to contain keys: purchase_units, but they were not present. Actual keys: foo');
 
         $this->paypalPaymentRefundProcessor->refund($payment);
     }
