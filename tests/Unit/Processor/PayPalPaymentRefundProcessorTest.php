@@ -180,6 +180,31 @@ final class PayPalPaymentRefundProcessorTest extends TestCase
     }
 
     #[Test]
+    public function it_does_not_refund_a_capture_that_paypal_already_reports_as_refunded(): void
+    {
+        $payment = $this->createMock(PaymentInterface::class);
+        $paymentMethod = $this->createMock(PaymentMethodInterface::class);
+        $gatewayConfig = $this->createMock(GatewayConfigInterface::class);
+        $order = $this->createMock(OrderInterface::class);
+
+        $payment->method('getMethod')->willReturn($paymentMethod);
+        $paymentMethod->method('getGatewayConfig')->willReturn($gatewayConfig);
+        $gatewayConfig->method('getFactoryName')->willReturn('sylius_paypal');
+        $payment->method('getDetails')->willReturn(['paypal_order_id' => '123123']);
+        $payment->method('getOrder')->willReturn($order);
+
+        $this->authorizeClientApi->method('authorize')->with($paymentMethod)->willReturn('TOKEN');
+        $this->orderDetailsApi
+            ->method('get')
+            ->with('TOKEN', '123123')
+            ->willReturn(['purchase_units' => [['payments' => ['captures' => [['id' => '555', 'status' => 'REFUNDED']]]]]]);
+
+        $this->refundOrderApi->expects(self::never())->method('refund');
+
+        $this->paypalPaymentRefundProcessor->refund($payment);
+    }
+
+    #[Test]
     public function it_throws_an_exception_when_order_details_do_not_contain_expected_keys(): void
     {
         $payment = $this->createMock(PaymentInterface::class);
