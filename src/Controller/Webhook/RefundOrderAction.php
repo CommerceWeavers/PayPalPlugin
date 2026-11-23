@@ -18,8 +18,10 @@ use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Component\Payment\PaymentTransitions;
 use Sylius\PayPalPlugin\Api\CacheAuthorizeClientApiInterface;
 use Sylius\PayPalPlugin\Api\WebhookSignatureVerifierInterface;
+use Sylius\PayPalPlugin\Event\PaymentRefundedInPayPal;
 use Sylius\PayPalPlugin\Exception\PaymentNotFoundException;
 use Sylius\PayPalPlugin\Exception\PayPalWrongDataException;
+use Sylius\PayPalPlugin\Factory\PayPalRefundFactoryInterface;
 use Sylius\PayPalPlugin\Provider\PaymentProviderInterface;
 use Sylius\PayPalPlugin\Provider\PayPalPaymentMethodProviderInterface;
 use Sylius\PayPalPlugin\Provider\PayPalRefundDataProviderInterface;
@@ -28,6 +30,7 @@ use Sylius\PayPalPlugin\Repository\Query\PaypalPaymentQueryInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 use Webmozart\Assert\Assert;
 
 final readonly class RefundOrderAction
@@ -41,6 +44,8 @@ final readonly class RefundOrderAction
         private CacheAuthorizeClientApiInterface $authorizeClientApi,
         private WebhookSignatureVerifierInterface $webhookSignatureVerifier,
         private WebhookIdProviderInterface $webhookIdProvider,
+        private PayPalRefundFactoryInterface $payPalRefundFactory,
+        private EventDispatcherInterface $eventDispatcher,
         private ?PaypalPaymentQueryInterface $paypalPaymentQuery = null,
     ) {
         if (null !== $this->paymentProvider) {
@@ -88,7 +93,8 @@ final readonly class RefundOrderAction
             return new JsonResponse(['error' => 'Not found'], Response::HTTP_NOT_FOUND);
         }
 
-        $refundData = $this->payPalRefundDataProvider->provide($this->getPayPalPaymentUrl($request));
+        $refundResource = $this->getRefundResource($request);
+        $refundData = $this->payPalRefundDataProvider->provide($this->getPayPalPaymentUrl($refundResource));
 
         try {
             if (null !== $this->paypalPaymentQuery) {
@@ -100,16 +106,23 @@ final readonly class RefundOrderAction
             return new JsonResponse(['error' => $exception->getMessage()], Response::HTTP_NOT_FOUND);
         }
 
-        if ($this->stateMachineFactory->can($payment, PaymentTransitions::GRAPH, PaymentTransitions::TRANSITION_REFUND)) {
+        $refund = $this->payPalRefundFactory->createFromWebhookPayload($refundResource, $refundData);
+
+        if (
+            $refund->captureFullyRefunded &&
+            $this->stateMachineFactory->can($payment, PaymentTransitions::GRAPH, PaymentTransitions::TRANSITION_REFUND)
+        ) {
             $this->stateMachineFactory->apply($payment, PaymentTransitions::GRAPH, PaymentTransitions::TRANSITION_REFUND);
         }
 
         $this->paymentManager->flush();
 
+        $this->eventDispatcher->dispatch(new PaymentRefundedInPayPal($payment, $refund));
+
         return new JsonResponse([], Response::HTTP_NO_CONTENT);
     }
 
-    private function getPayPalPaymentUrl(Request $request): string
+    private function getRefundResource(Request $request): array
     {
         /**
          * @var string $content
@@ -118,11 +131,16 @@ final readonly class RefundOrderAction
 
         $content = (array) json_decode($content, true);
         Assert::keyExists($content, 'resource');
-        $resource = (array) $content['resource'];
-        Assert::keyExists($resource, 'links');
+
+        return (array) $content['resource'];
+    }
+
+    private function getPayPalPaymentUrl(array $refundResource): string
+    {
+        Assert::keyExists($refundResource, 'links');
 
         /** @var string[] $link */
-        foreach ($resource['links'] as $link) {
+        foreach ($refundResource['links'] as $link) {
             if ($link['rel'] === 'up') {
                 return $link['href'];
             }
