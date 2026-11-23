@@ -13,6 +13,8 @@ use Sylius\PayPalPlugin\Downloader\SftpPayoutsReportDownloader;
 use Sylius\PayPalPlugin\Enabler\PaymentMethodEnablerInterface;
 use Sylius\PayPalPlugin\Enabler\PayPalPaymentMethodEnabler;
 use Sylius\PayPalPlugin\Factory\PayPalPaymentMethodNewResourceFactory;
+use Sylius\PayPalPlugin\Factory\PayPalRefundFactory;
+use Sylius\PayPalPlugin\Factory\PayPalRefundFactoryInterface;
 use Sylius\PayPalPlugin\Form\Extension\PaymentMethodTypeExtension;
 use Sylius\PayPalPlugin\Form\Type\PayPalConfigurationType;
 use Sylius\PayPalPlugin\Form\Type\PayPalSandboxCredentialsType;
@@ -131,6 +133,10 @@ return static function (ContainerConfigurator $container) {
             service('.inner'),
             service('sylius_paypal.onboarding.processor.basic'),
         ]);
+
+    $services->set('sylius_paypal.factory.paypal_refund', PayPalRefundFactory::class);
+
+    $services->alias(PayPalRefundFactoryInterface::class, 'sylius_paypal.factory.paypal_refund');
 
     $services->set('sylius_paypal.provider.order', OrderProvider::class)
         ->args([service('sylius.repository.order')]);

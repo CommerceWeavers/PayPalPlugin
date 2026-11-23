@@ -38,6 +38,8 @@ return static function (ContainerConfigurator $container) {
             service('sylius_paypal.api.cache_authorize_client'),
             service('sylius_paypal.api.webhook_signature_verifier'),
             service('sylius_paypal.provider.webhook_id'),
+            service('sylius_paypal.factory.paypal_refund'),
+            service('event_dispatcher'),
             service('sylius_paypal.repository.query.paypal_payment'),
         ]);
 
