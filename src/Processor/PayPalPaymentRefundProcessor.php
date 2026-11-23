@@ -29,6 +29,8 @@ use Sylius\PayPalPlugin\Provider\RefundReferenceNumberProviderInterface;
 
 final readonly class PayPalPaymentRefundProcessor implements PaymentRefundProcessorInterface
 {
+    private const CAPTURE_STATUS_REFUNDED = 'REFUNDED';
+
     public function __construct(
         private CacheAuthorizeClientApiInterface $authorizeClientApi,
         private OrderDetailsApiInterface $orderDetailsApi,
@@ -62,9 +64,16 @@ final readonly class PayPalPaymentRefundProcessor implements PaymentRefundProces
             $details = $this->orderDetailsApi->get($token, (string) $details['paypal_order_id']);
             PayPalMissingResponseDataException::assertKeysExist($details, 'purchase_units');
 
+            $capture = (array) ($details['purchase_units'][0]['payments']['captures'][0] ?? []);
+            PayPalMissingResponseDataException::assertKeysExist($capture, 'id', 'status');
+
+            if (self::CAPTURE_STATUS_REFUNDED === $capture['status']) {
+                return;
+            }
+
             $authAssertion = $this->payPalAuthAssertionGenerator->generate($paymentMethod);
             $referenceNumber = $this->refundReferenceNumberProvider->provide($payment);
-            $payPalPaymentId = (string) $details['purchase_units'][0]['payments']['captures'][0]['id'];
+            $payPalPaymentId = (string) $capture['id'];
 
             $this->refundOrderApi->refund(
                 $token,
